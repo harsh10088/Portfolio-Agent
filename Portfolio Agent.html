@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Portfolio Agent</title>
+<style>
+:root{--bg:#f6f5f1;--sf:#fff;--tx:#1c1b19;--mu:#6b6860;--bd:#e3e0d8;--ac:#4f46e5;--ac2:#fff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141413;--sf:#1f1e1c;--tx:#f0eee8;--mu:#9a968c;--bd:#33312d;--ac:#8b85ff;--ac2:#141413}}
+:root[data-theme="dark"]{--bg:#141413;--sf:#1f1e1c;--tx:#f0eee8;--mu:#9a968c;--bd:#33312d;--ac:#8b85ff;--ac2:#141413}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:20px 20px 4px;max-width:1200px;margin:auto}
+h1{font-size:22px;margin:0}header p{color:var(--mu);margin:4px 0 0}
+main{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:16px;max-width:1200px;margin:auto;padding:16px 20px 32px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:16px}
+label{display:block;font-size:12px;font-weight:600;color:var(--mu);margin:12px 0 4px;text-transform:uppercase;letter-spacing:.04em}
+label:first-child{margin-top:0}
+input,textarea,select{width:100%;padding:9px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+textarea{resize:vertical;min-height:70px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{font:inherit;cursor:pointer;border-radius:10px;padding:10px 14px;border:1px solid var(--bd);background:var(--sf);color:var(--tx)}
+button.p{background:var(--ac);color:var(--ac2);border-color:var(--ac);font-weight:600;width:100%;margin-top:16px}
+button:disabled{opacity:.5;cursor:default}
+.steps{list-style:none;margin:12px 0 0;padding:0;font-size:13px;color:var(--mu)}
+.steps li{padding:3px 0}.steps li.on{color:var(--tx)}.steps li.done{color:var(--ac)}
+.steps li:before{content:"○ "}.steps li.on:before{content:"◐ "}.steps li.done:before{content:"● "}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.bar span{flex:1;color:var(--mu);font-size:13px}
+iframe{width:100%;height:640px;border:1px solid var(--bd);border-radius:10px;background:#fff}
+.empty{height:640px;display:grid;place-items:center;text-align:center;color:var(--mu);border:1px dashed var(--bd);border-radius:10px;padding:20px}
+.err{color:#c2410c;font-size:13px;margin-top:8px}
+</style>
+</head>
+<body>
+<header><h1>Portfolio Agent</h1><p>Tell the agent about yourself. It plans, writes, designs and assembles your site.</p></header>
+<main>
+<section class="card">
+<label>Name</label><input id="name" value="Aarav Patil">
+<div class="row"><div><label>Role</label><input id="role" value="Full-stack developer"></div>
+<div><label>Location</label><input id="loc" value="Maharashtra, India"></div></div>
+<label>About you (rough notes are fine)</label>
+<textarea id="about">3 years building web apps with React and Node. Love clean UX and automation. Looking for freelance and remote roles.</textarea>
+<label>Skills (comma separated)</label><input id="skills" value="React, Node.js, TypeScript, PostgreSQL, Figma">
+<label>Projects (one per line: name - what it does)</label>
+<textarea id="projects" rows="4">Krishi Mart - marketplace for local farmers
+TaskFlow - kanban app with real-time sync
+Invoicely - GST invoice generator</textarea>
+<div class="row"><div><label>Tone</label><select id="tone"><option>Professional</option><option>Friendly</option><option>Bold</option><option>Minimal</option></select></div>
+<div><label>Style</label><select id="style"><option value="indigo">Indigo</option><option value="forest">Forest</option><option value="sunset">Sunset</option><option value="mono">Mono</option></select></div></div>
+<label>Contact email</label><input id="email" value="you@example.com">
+<button class="p" id="go">Build my portfolio</button>
+<ul class="steps" id="steps"></ul><div class="err" id="err"></div>
+</section>
+<section class="card">
+<div class="bar"><span id="status">Preview</span><button id="regen" disabled>Rewrite copy</button><button id="dl" disabled>Download HTML</button></div>
+<div id="stage"><div class="empty">Your portfolio preview will appear here.</div></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const PAL={indigo:["#4f46e5","#f8f8ff","#14123a"],forest:["#15803d","#f6faf6","#10231a"],sunset:["#ea580c","#fff8f3","#2a160b"],mono:["#111111","#fafafa","#111111"]};
+const STEPS=["Analyzing your profile","Planning site structure","Writing copy","Designing layout","Assembling site"];
+let html="",lastData=null;
+
+function prof(){return{name:$("name").value.trim(),role:$("role").value.trim(),loc:$("loc").value.trim(),about:$("about").value.trim(),
+skills:$("skills").value.split(",").map(s=>s.trim()).filter(Boolean),
+projects:$("projects").value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const i=l.indexOf(" - ");return i<0?{name:l,desc:""}:{name:l.slice(0,i),desc:l.slice(i+3)}}),
+tone:$("tone").value,email:$("email").value.trim()}}
+
+function setSteps(n){$("steps").innerHTML=STEPS.map((s,i)=>`<li class="${i<n?"done":i===n?"on":""}">${s}</li>`).join("")}
+
+function fallback(p){return{headline:`Hi, I'm ${p.name}. I build as a ${p.role}.`,tagline:p.about.split(".")[0]+".",about:p.about,
+projects:p.projects.map(x=>({name:x.name,desc:x.desc,tags:p.skills.slice(0,3)})),cta:"Let's work together"}}
+
+async function writeCopy(p){
+  const sample=await claude.use("sample");
+  if(!sample)return fallback(p);
+  const prompt=`You are a portfolio copywriter agent. Using the profile below, write website copy in a ${p.tone} tone. Never invent employers, awards or numbers. Return ONLY JSON of shape {"headline":string(max 12 words),"tagline":string(max 20 words),"about":string(2-3 sentences, first person),"projects":[{"name":string,"desc":string(1-2 sentences),"tags":[string,string,string]}],"cta":string(max 6 words)}. Keep project order and names.\n\nProfile: ${JSON.stringify(p)}`;
+  return await sample.json(prompt,{modelTier:"default",cache:false});
+}
+
+function render(p,d){
+  const [ac,bg,tx]=PAL[$("style").value];
+  const projs=(d.projects||[]).map(x=>`<article><h3>${esc(x.name)}</h3><p>${esc(x.desc)}</p><div class="t">${(x.tags||[]).map(t=>`<span>${esc(t)}</span>`).join("")}</div></article>`).join("");
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(p.name)} | ${esc(p.role)}</title><style>
+:root{--ac:${ac};--bg:${bg};--tx:${tx}}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.6 system-ui,sans-serif}
+nav{display:flex;justify-content:space-between;padding:20px 6vw;font-weight:700}nav a{color:var(--tx);text-decoration:none;font-weight:500;margin-left:18px;font-size:14px}
+.hero{padding:9vh 6vw 6vh;max-width:900px}.hero small{color:var(--ac);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+h1{font-size:clamp(30px,6vw,56px);line-height:1.1;margin:10px 0}.hero p{font-size:19px;opacity:.75;max-width:620px}
+.btn{display:inline-block;margin-top:14px;padding:12px 22px;border-radius:999px;background:var(--ac);color:#fff;text-decoration:none;font-weight:600}
+section{padding:6vh 6vw;max-width:1000px}h2{font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--ac)}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}article{border:1px solid color-mix(in srgb,var(--tx) 15%,transparent);border-radius:14px;padding:18px}
+article h3{margin:0 0 6px}article p{margin:0 0 10px;opacity:.75;font-size:15px}.t span,.k span{display:inline-block;font-size:12px;border:1px solid color-mix(in srgb,var(--ac) 50%,transparent);color:var(--ac);border-radius:999px;padding:2px 10px;margin:0 6px 6px 0}
+.k span{font-size:14px;padding:5px 14px}footer{padding:6vh 6vw;opacity:.6;font-size:14px}</style></head><body>
+<nav><span>${esc(p.name)}</span><div><a href="#about">About</a><a href="#work">Work</a><a href="#contact">Contact</a></div></nav>
+<div class="hero"><small>${esc(p.role)} · ${esc(p.loc)}</small><h1>${esc(d.headline)}</h1><p>${esc(d.tagline)}</p><a class="btn" href="mailto:${esc(p.email)}">${esc(d.cta)}</a></div>
+<section id="about"><h2>About</h2><p>${esc(d.about)}</p><div class="k">${p.skills.map(s=>`<span>${esc(s)}</span>`).join("")}</div></section>
+<section id="work"><h2>Selected work</h2><div class="g">${projs}</div></section>
+<section id="contact"><h2>Contact</h2><p><a href="mailto:${esc(p.email)}" style="color:var(--ac)">${esc(p.email)}</a></p></section>
+<footer>© ${new Date().getFullYear()} ${esc(p.name)}</footer></body></html>`;
+}
+
+function show(){$("stage").innerHTML='<iframe id="fr" sandbox title="Portfolio preview"></iframe>';$("fr").srcdoc=html;$("dl").disabled=false;$("regen").disabled=false;$("status").textContent="Preview ready"}
+
+async function build(reuse){
+  $("err").textContent="";$("go").disabled=true;$("regen").disabled=true;
+  const p=prof();
+  try{
+    setSteps(0);await new Promise(r=>setTimeout(r,350));
+    setSteps(1);await new Promise(r=>setTimeout(r,350));
+    setSteps(2);
+    let d=reuse&&lastData?lastData:null;
+    if(!d){try{d=await writeCopy(p)}catch(e){
+      $("err").textContent=e&&e.code==="not_granted"?"AI access was declined, so I used a basic template.":"AI step failed, so I used a basic template.";d=fallback(p)}}
+    lastData=d;
+    setSteps(3);await new Promise(r=>setTimeout(r,300));
+    html=render(p,d);setSteps(4);show();setSteps(5);
+  }catch(e){$("err").textContent="Something went wrong. Try again."}
+  $("go").disabled=false;
+}
+$("go").onclick=()=>build(false);
+$("regen").onclick=()=>{lastData=null;build(false)};
+$("style").onchange=()=>{if(lastData){html=render(prof(),lastData);show()}};
+$("dl").onclick=async()=>{
+  try{const dl=await claude.use("downloads");
+    if(!dl){$("err").textContent="Download isn't available here. Open the preview and copy the page source instead.";return}
+    await dl.save({filename:"portfolio.html",data:html})}catch(e){}
+};
+</script>
+</body>
+</html>
